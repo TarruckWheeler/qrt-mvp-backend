@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>QRT MVP Dashboard</title>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #f0f2f5; color: #1c1e21; display: grid; place-content: center; min-height: 100vh; margin: 0; }
+        .container { background: #fff; padding: 2rem; border-radius: 1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; min-width: 400px; }
+        h1 { color: #0b1a51; }
+        .score { font-size: 4rem; font-weight: bold; color: #42b72a; margin: 1rem 0; }
+        button { background: #1877f2; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-size: 1rem; cursor: pointer; margin-top: 1rem; }
+        button:hover { background: #166fe5; }
+        .info { margin-top: 1.5rem; font-size: 0.9rem; color: #606770; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Quantum Fidelity Dashboard</h1>
+        <p>Live Fidelity for <strong>ibm_kyoto</strong></p>
+        <div id="fidelity-score" class="score">Loading...</div>
+        <button id="connect-wallet-btn">Connect Wallet</button>
+        <div class="info">
+            <p>Wallet: <span id="wallet-address">Not Connected</span></p>
+            <p>QRT Balance (Sepolia): <span id="qrt-balance">0</span></p>
+        </div>
+    </div>
+
+    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js"></script>
+    <script>
+        const fidelityScoreEl = document.getElementById('fidelity-score');
+        const connectWalletBtn = document.getElementById('connect-wallet-btn');
+        const walletAddressEl = document.getElementById('wallet-address');
+        const qrtBalanceEl = document.getElementById('qrt-balance');
+
+        const QRT_CONTRACT_ADDRESS = "YOUR_DEPLOYED_CONTRACT_ADDRESS"; // We will fill this in after deploying our contract
+        const QRT_ABI = [
+            "function balanceOf(address owner) view returns (uint256)",
+            "function decimals() view returns (uint8)"
+        ];
+
+        let provider;
+        let signer;
+        let qrtContract;
+
+        // 1. Fetch Fidelity Score from our Backend
+        async function fetchFidelity() {
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/v1/fidelity/ibm_kyoto');
+                const data = await response.json();
+                fidelityScoreEl.textContent = data.composite_fidelity_score.toFixed(4);
+            } catch (error) {
+                fidelityScoreEl.textContent = "Error";
+                console.error("Error fetching fidelity:", error);
+            }
+        }
+
+        // 2. Connect to MetaMask Wallet
+        connectWalletBtn.addEventListener('click', async () => {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
+                    signer = provider.getSigner();
+                    const address = await signer.getAddress();
+                    walletAddressEl.textContent = `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+                    connectWalletBtn.textContent = "Connected";
+                    
+                    // After connecting, get balance
+                    getQrtBalance();
+                } catch (error) {
+                    console.error("Wallet connection failed:", error);
+                }
+            } else {
+                alert('Please install MetaMask!');
+            }
+        });
+
+        // 3. Get QRT Token Balance
+        async function getQrtBalance() {
+            if (!signer || QRT_CONTRACT_ADDRESS === "YOUR_DEPLOYED_CONTRACT_ADDRESS") {
+                return;
+            }
+            qrtContract = new ethers.Contract(QRT_CONTRACT_ADDRESS, QRT_ABI, provider);
+            const balance = await qrtContract.balanceOf(await signer.getAddress());
+            const decimals = await qrtContract.decimals();
+            qrtBalanceEl.textContent = ethers.utils.formatUnits(balance, decimals);
+        }
+
+        // Fetch the score every 15 seconds
+        fetchFidelity();
+        setInterval(fetchFidelity, 15000);
+    </script>
+</body>
+</html>
